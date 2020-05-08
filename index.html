@@ -1,0 +1,422 @@
+<!DOCTYPE html>
+<html>
+<head>
+	<meta http-equiv="Content-Type" content="text/html" charset="utf-8"/>
+	<title>Babylon - Getting Started</title>
+	<!--- Link to the last version of BabylonJS --->
+	<script src="http://cdn.babylonjs.com/babylon.js"></script>
+	<script src="http://cdn.babylonjs.com/loaders/babylonjs.loaders.min.js"></script>
+<!--
+	<script src="utilities.js" charset="utf-8"></script>
+	<script src="data.js" charset="utf-8"></script>
+	<script src="dataHumanNames.js" charset="utf-8"></script>
+	<script src="dataPlaces.js" charset="utf-8"></script>
+	<script src="dataConditioner.js" charset="utf-8"></script>
+	<script src="dataPicker.js" charset="utf-8"></script>
+	<script src="dataMason.js" charset="utf-8"></script>
+	<script src="place.js" charset="utf-8"></script>
+-->
+	<script src="utilModule.js" charset="utf-8"></script>
+	<script src="map.js" charset="utf-8"></script>
+
+
+	<style>
+		html, body {
+			overflow: hidden;
+			width   : 100%;
+			height  : 100%;
+			margin  : 0;
+			padding : 0;
+		}
+
+		#renderCanvas {
+			width   : 100%;
+			height  : 100%;
+			touch-action: none;
+		}
+	</style>
+</head>
+<body>
+<canvas id="renderCanvas"></canvas>
+<script >	
+
+let Tile = {
+	UNKNOWN: '?'
+}
+
+const Direction = new class {
+	constructor() {
+		this.add = [
+			{ x:0,  y:-1 },
+			{ x:1,  y:-1 },
+			{ x:1,  y:0 },
+			{ x:1,  y:1 },
+			{ x:0,  y:1 },
+			{ x:-1, y:1 },
+			{ x:-1, y:0 },
+			{ x:-1, y:-1 }
+		];
+		this.count = 8;
+	}
+	fromCommand(command) {
+		let c2d = { N: 0, NE: 1, E: 2, SE: 3, S: 4, SW: 5, W: 6, NW: 7 };
+		return ( c2d[Command[command]] != undefined ? c2d[Command[command]] : false );
+	}
+	toCommand(dir) {
+		let d2c = [ Command.N, Command.NE, Command.E, Command.SE, Command.S, Command.SW, Command.W, Command.NW ];
+		if( dir === false || dir < 0 || dir >= Direction.count ) { debugger; }
+		return d2c[dir];
+	
+	}
+	predictable(dx,dy) {
+		let dirId = { N: 0, NE: 1, E: 2, SE: 3, S: 4, SW: 5, W: 6, NW: 7 };
+		if( dy < 0 ) return dx==0 ? dirId.N : (dx<0 ? dirId.NW : dirId.NE);
+		if( dy > 0 ) return dx==0 ? dirId.S : (dx<0 ? dirId.SW : dirId.SE);
+		return dx==0 ? false : (dx<0 ? dirId.W : dirId.E);
+	} 
+	natural(dx,dy) {
+		let ax = Math.abs(dx);
+		let ay = Math.abs(dy);
+		if( ax != ay ) {
+			// We want to flatten our trajectory sometimes.
+			if( Math.rand(0,ax+ay)<Math.max(ax,ay) ) {
+				if( ax < ay ) { dx=0; } else { dy=0; }
+			}
+		}
+		return this.predictable(dx,dy);
+	}
+};
+
+window.SymbolToType = {
+	'#': {
+		isWall: true
+	},
+	' ': {
+		isFloor: true
+	}
+}
+
+window.addEventListener('DOMContentLoaded', function(){
+
+	let Bab = {};
+
+	Bab.PropTypeHash = {
+		wallSmall: {
+			meshId: 'wall_A_orc_stronghold_mat_0',
+		},
+		wallStandard: {
+			meshId: 'wall_B3_orc_stronghold_mat_0', //wall_B_orc_stronghold_mat_0',
+		},
+		wallDouble: {
+			meshId: 'wall_C_orc_stronghold_mat_0',
+		},
+		column1: {
+			meshId: 'columnA11_orc_stronghold_mat_0', //columnA_orc_stronghold_mat_0',
+		},
+		floor1: {
+			meshId: 'floortileA19_floor_A_mat_0', //floortileA1_floor_A_mat_0', //'floortileA_floor_A_mat_0',
+		},
+		floor2: {
+			meshId: 'floortileA_alt_floor_A_alt_mat_0',
+		},
+		floor3: {
+			meshId: 'floortileB_floor_B_mat_0',
+		},
+		lantern: {
+			meshId: 'firepit_orc_stronghold_mat_0',
+			light: 8,
+		},
+		justLight: {
+			meshId: null,
+			light: 8,
+		}
+	};
+
+
+	Bab.Mesh = class {
+		constructor(meshId) {
+			let mesh = Bab.Mesh.list.find( mesh=>mesh.id==meshId );
+			console.log("MESH",mesh);
+			this.instance = mesh.createInstance("prop" + Math.random());
+/*
+			let i = this.instance;
+			let m = mesh;
+			i.rotation.x = m.rotation.x;
+			i.rotation.y = m.rotation.y;
+			i.rotation.z = m.rotation.z;
+			i.rotationQuaternion.w = m.rotationQuaternion.w;
+			i.rotationQuaternion.x = m.rotationQuaternion.x;
+			i.rotationQuaternion.y = m.rotationQuaternion.y;
+			i.rotationQuaternion.z = m.rotationQuaternion.z;
+			i.setPivotMatrix = m.setPivotMatrix;
+
+			this.instance.absoluteRotationQuaternion.w = 0;
+			this.instance.absoluteRotationQuaternion.z = 1;
+			console.log("INSTANCE",this.instance);
+			//debugger;
+*/
+		}
+		set position(value) {
+			return this.instance.position = value;
+		}
+		get position() {
+			return this.instance.position;
+		}
+		rotate(...args) {
+			this.instance.rotate(...args);
+		}
+	};
+
+	Bab.Light = class {
+		constructor(scene) {
+			let id = 'L'+Math.random();
+			this.light = new BABYLON.PointLight(id, new BABYLON.Vector3(0,0,0), scene);
+			this.light.diffuse = new BABYLON.Color3(1.0, 0.64, 0.00);	// G was 0.85
+			this.light.specular = new BABYLON.Color3(1.0, 0.85, 0.00);
+			this.intensity = 0;
+		}
+		set intensity(value) {
+			this.light.intensity = value;
+		}
+		set position(value) {
+			return this.light.position = value;
+		}
+		get position() {
+			return this.light.position;
+		}
+		rotate(...args) {
+			this.light.rotate(...args);
+		}
+	}
+
+	let Entity = {};
+	Entity.Base = class {
+		constructor() {
+			this.babPos = new BABYLON.Vector3(0,0,0);
+			this._facing = 0;
+		}
+		get x() {
+			return this.babPos.x/Entity.unit;
+		}
+		get y() {
+			return -this.babPos.z/Entity.unit;
+		}
+		get zAltitude() {
+			return this.babPos.y/Entity.unit;
+		}
+		set x(value) {
+			this.babPos.x = value * Entity.unit;
+		}
+		set y(value) {
+			this.babPos.z = -value * Entity.unit;
+		}
+		set zAltitude(value) {
+			this.babPos.y = value * Entity.unit;
+		}
+		set facing(degrees) {
+			this._facing = degrees;
+		}
+		get facing() {
+			return this._facing;
+		}
+		setXY(x,y,z=null)	{ this.x=x; this.y=y; if(z!==null) this.zAltitude=z; return this; }
+		setFacing(degrees)	{ this.facing = degrees; return this; }
+		setLight(value)		{ this.light = value; return this; }
+	}
+
+	Entity.Mesh = class extends Entity.Base {
+		constructor(propTypeId,scene=Entity.scene) {
+			super();
+			if( propTypeId ) {
+				let type = Bab.PropTypeHash[propTypeId];
+				if( type.meshId ) {
+					this.babMesh = new Bab.Mesh(type.meshId);
+					this.babMesh.position = this.babPos;
+				}
+				if( type.light ) {
+					this.babLight = new Bab.Light(scene);
+					this.light = type.light;
+					this.babLight.position = this.babPos;
+				}
+			}
+		}
+		get scene() {
+			console.assert(false);
+		}
+		set facing(degrees) {
+			super.facing = degrees;
+			this.babMesh.rotate(BABYLON.Axis.Y, (this._facing/360) * Math.PI*2, BABYLON.Space.WORLD);
+		}
+		set light(value) {
+			this.babLight.intensity = value * 500*Entity.unit;
+		}
+	}
+
+	Entity.Wall = class extends Entity.Base {
+		constructor() {
+			super();
+			this.list = [];
+		}
+		add(meshId,dx,dy,facing=0) {
+			let mesh = new Entity.Mesh( meshId ).setXY( this.x+dx, this.y+dy ).setFacing(facing);
+			this.list.push( mesh );
+		}
+		setWalls(n,e,s,w) {
+			if( !n ) this.add( 'wallStandard',  0.0, -0.5, 0 );
+			if( !e ) this.add( 'wallStandard',  0.5,  0.0, 90 );
+			if( !s ) this.add( 'wallStandard',  0.0,  0.5, 180 );
+			if( !w ) this.add( 'wallStandard', -0.5,  0.0, 270 );
+			//if( !n || !e ) this.add( 'column1',  0.5, -0.5 );
+			//if( !s || !e ) this.add( 'column1',  0.5,  0.5 );
+			//if( !n || !w ) this.add( 'column1', -0.5, -0.5 );
+			//if( !s || !w ) this.add( 'column1', -0.5,  0.5 );
+			return this;
+		}
+	}
+
+
+	Entity.Camera = class extends Entity.Base {
+		constructor(scene) {
+			super();
+			this.camera = new BABYLON.FreeCamera('gameCamera', this.babPos, scene)
+		}
+		setTarget(entity) {
+			this.camera.setTarget( entity.babPos );
+		}
+	}
+
+	let Manager = class {
+		constructor(scene) {
+			this.scene = scene;
+			Entity.scene = this.scene;
+			this.meshList = null;
+			this.started = false;
+		}
+		load() {
+			BABYLON.SceneLoader.ImportMesh("", "./OrcStronghold/", "scene.gltf", this.scene, (meshList) => {
+				meshList.forEach( mesh=>console.log(mesh.id) );
+				meshList.forEach( mesh=>mesh.isVisible = true );
+				meshList.forEach( mesh=>mesh.setParent(null) );
+				Bab.Mesh.list = meshList;
+				this.meshList = meshList;
+			});
+		}
+		add(entity) {
+			return entity;
+		}
+		start() {
+			this.started = true;
+			Entity.unit = 200;
+
+			let s0 = 
+				'########\n'+
+				'#   #  #\n'+
+				'#      #\n'+
+				'#   #  #\n'+
+				'## #####\n'+
+				'## ##  #\n'+
+				'##     #\n'+
+				'########\n';
+
+			let map0 = new SimpleMap( s0 );
+			let line = [];
+			map0.traverse( (x,y,type) => {
+				let symbol = map0.tileSymbolGetFastUnasfe(x,y);
+				line[y] = line[y] || '';
+				line[y] += symbol+symbol+symbol;
+			});
+			let s = '';
+			for( let y=0 ; y<line.length ; ++y ) {
+				s += line[y]+'\n';
+				s += line[y]+'\n';
+				s += line[y]+'\n';
+			}
+
+			let map = new SimpleMap(s);
+
+			map.traverse( (x,y,type) => {
+				if( type.isWall ) {
+					let nType = map.tileTypeGet(x,y-1);
+					let n = !nType || nType.isWall;
+					let eType = map.tileTypeGet(x+1,y);
+					let e = !eType || eType.isWall;
+					let sType = map.tileTypeGet(x,y+1);
+					let s = !sType || sType.isWall;
+					let wType = map.tileTypeGet(x-1,y);
+					let w = !wType || wType.isWall;
+					this.add( new Entity.Wall().setXY(x,y).setWalls(n,e,s,w) );
+				}
+				else {
+					this.add( new Entity.Mesh('floor1').setXY(x,y) );					
+				}
+			});
+
+//			let x = 0;
+//			let y = -3;
+
+//			this.add( new Entity.Mesh('wallStandard').setXY(x,y-1).setFacing(0) );
+//			this.add( new Entity.Mesh('wallStandard').setXY(x-1,y).setFacing(90) );
+//			this.add( new Entity.Mesh('wallStandard').setXY(x+1,y).setFacing(270) );
+//			this.add( new Entity.Mesh('floor1').setXY(x,y) );
+			this.add( new Entity.Mesh('lantern').setXY(6,3,0.5) );
+
+			this.player = this.add( new Entity.Mesh('justLight').setXY(6,6,0.5) );
+			this.camera = this.add( new Entity.Camera() );
+
+			var lightAmbient = new BABYLON.HemisphericLight('light1', new BABYLON.Vector3(0,1,0), this.scene);
+			lightAmbient.setEnabled(true)
+			lightAmbient.intensity = 0.1; //1;
+
+			window.addEventListener('keypress',(event)=>{
+				let player = this.player;
+				switch( event.key ) {
+					case 'w': player.y -= 1; break;
+					case 's': player.y += 1; break;
+					case 'a': player.x -= 1; break;
+					case 'd': player.x += 1; break;
+				}
+			});
+			window.addEventListener('wheel', function(evt) {
+				//data.zoomAdjust(-evt.deltaY);
+				event.preventDefault();
+			});
+
+		}
+		tick() {
+			if( !this.meshList ) {
+				return;
+			}
+			if( !this.started ) {
+				this.start();
+			}
+
+			this.camera.setXY( this.player.x, this.player.y+3 );
+			this.camera.zAltitude = this.player.zAltitude+4*2;
+			this.camera.setTarget(this.player);
+			this.scene.render();
+		}
+	}
+
+	{
+		Module.realize();
+
+		let canvas = document.getElementById('renderCanvas');
+		let engine = new BABYLON.Engine(canvas, true);
+		let scene = new BABYLON.Scene(engine);
+		let manager  = new Manager(scene);
+		manager.load();
+
+		// run the render loop
+		engine.runRenderLoop(function(){
+			manager.tick();
+		});
+
+		// the canvas/window resize event handler
+		window.addEventListener('resize', function(){
+			engine.resize();
+		});
+	}
+});
+</script>
+</body>
+</html>
