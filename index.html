@@ -6,17 +6,8 @@
 	<!--- Link to the last version of BabylonJS --->
 	<script src="http://cdn.babylonjs.com/babylon.js"></script>
 	<script src="http://cdn.babylonjs.com/loaders/babylonjs.loaders.min.js"></script>
-<!--
-	<script src="utilities.js" charset="utf-8"></script>
-	<script src="data.js" charset="utf-8"></script>
-	<script src="dataHumanNames.js" charset="utf-8"></script>
-	<script src="dataPlaces.js" charset="utf-8"></script>
-	<script src="dataConditioner.js" charset="utf-8"></script>
-	<script src="dataPicker.js" charset="utf-8"></script>
-	<script src="dataMason.js" charset="utf-8"></script>
-	<script src="place.js" charset="utf-8"></script>
--->
 	<script src="utilModule.js" charset="utf-8"></script>
+	<script src="time.js" charset="utf-8"></script>
 	<script src="map.js" charset="utf-8"></script>
 
 
@@ -40,121 +31,267 @@
 <canvas id="renderCanvas"></canvas>
 <script >	
 
-let Tile = {
-	UNKNOWN: '?'
-}
+Module.add( 'main', ()=> {
+	String.capitalize = function(s) {
+		return s.charAt(0).toUpperCase() + s.slice(1);
+	}
 
-const Direction = new class {
-	constructor() {
-		this.add = [
-			{ x:0,  y:-1 },
-			{ x:1,  y:-1 },
-			{ x:1,  y:0 },
-			{ x:1,  y:1 },
-			{ x:0,  y:1 },
-			{ x:-1, y:1 },
-			{ x:-1, y:0 },
-			{ x:-1, y:-1 }
-		];
-		this.count = 8;
-	}
-	fromCommand(command) {
-		let c2d = { N: 0, NE: 1, E: 2, SE: 3, S: 4, SW: 5, W: 6, NW: 7 };
-		return ( c2d[Command[command]] != undefined ? c2d[Command[command]] : false );
-	}
-	toCommand(dir) {
-		let d2c = [ Command.N, Command.NE, Command.E, Command.SE, Command.S, Command.SW, Command.W, Command.NW ];
-		if( dir === false || dir < 0 || dir >= Direction.count ) { debugger; }
-		return d2c[dir];
-	
-	}
-	predictable(dx,dy) {
-		let dirId = { N: 0, NE: 1, E: 2, SE: 3, S: 4, SW: 5, W: 6, NW: 7 };
-		if( dy < 0 ) return dx==0 ? dirId.N : (dx<0 ? dirId.NW : dirId.NE);
-		if( dy > 0 ) return dx==0 ? dirId.S : (dx<0 ? dirId.SW : dirId.SE);
-		return dx==0 ? false : (dx<0 ? dirId.W : dirId.E);
-	} 
-	natural(dx,dy) {
-		let ax = Math.abs(dx);
-		let ay = Math.abs(dy);
-		if( ax != ay ) {
-			// We want to flatten our trajectory sometimes.
-			if( Math.rand(0,ax+ay)<Math.max(ax,ay) ) {
-				if( ax < ay ) { dx=0; } else { dy=0; }
+	Object.each = function(obj,fn) {
+		for( let key in obj ) {
+			if( fn(obj[key],key) === false ) {
+				break;
 			}
 		}
-		return this.predictable(dx,dy);
 	}
-};
 
-window.SymbolToType = {
-	'#': {
-		isWall: true
-	},
-	' ': {
-		isFloor: true
+	let globalMapString = ``+
+	`############################################\n`+
+	`#.....######################################\n`+
+	`#####+##............########################\n`+
+	`###................########::::#############\n`+
+	`###........N.......##...####:::#############\n`+
+	`##........NCN......##...#::::::##:##########\n`+
+	`##.........N.....­:::­..:::::::##::#########\n`+
+	`##...4.......###+#::::..::::::::::::.#######\n`+
+	`##..444......###.:::::..:::::::::::#.#######\n`+
+	`##..444......##..:::::&#::::::::::::..######\n`+
+	`##...4...#.#####.­:::­.::::::::::::.....####\n`+
+	`##.......#.#¥*¥#........:::::::::::.......##\n`+
+	`##.....###.#¥¥¥#........#::::::::::.......##\n`+
+	`##....####.&#..#..N.......::::::::...MM...##\n`+
+	`###..######.&#.#.NCN.......::::::.##.MM...##\n`+
+	`###..#######...#..N...............##......##\n`+
+	`##########.###&#####+######+####..........##\n`+
+	`###.......##.....................##.­:::­...##\n`+
+	`###...###......................###:::::...##\n`+
+	`###...######...NNN......#+#....###:::::...##\n`+
+	`#######&........U.......+I+....###:::::...##\n`+
+	`######&.####..C.°.C.....#+#.......­:::­...##\n`+
+	`######.##¥¥#............................####\n`+
+	`######.#.¥*#............................####\n`+
+	`######...¥¥#......2............C........####\n`+
+	`############.....2::22...........N......####\n`+
+	`##########......2:::::2........°UN.....#####\n`+
+	`########.......2:::::::2.........N.....#####\n`+
+	`######..........::::::::2......C.......#####\n`+
+	`#####........22:::::::::2.............######\n`+
+	`#####........:::::::::::2.............######\n`+
+	`###....W.W..2::::::::::::.....­:::­..#######\n`+
+	`##....W.WW...2:::::::::::2....:::::..#######\n`+
+	`##...W.W......2:::::::::2.....:::::.....####\n`+
+	`##....W..W.....2:::.:::2......:::::......###\n`+
+	`##...W.W........2:2.222....N..­:::­.....####\n`+
+	`####........N....22.......NCN.......MM..####\n`+
+	`######.....NCN.............N..MM....MM..####\n`+
+	`#######.....N..##.............MM.........###\n`+
+	`##########.....##.####...................###\n`+
+	`##########......#######..##..............###\n`+
+	`##############.########..##..............###\n`+
+	`############################################\n`
+	;
+
+	let Tile = {
+		UNKNOWN: '?'
 	}
-}
 
-window.addEventListener('DOMContentLoaded', function(){
-
-	let Bab = {};
-
-	Bab.PropTypeHash = {
-		wallSmall: {
-			meshId: 'wall_A_orc_stronghold_mat_0',
-		},
-		wallStandard: {
-			meshId: 'wall_B3_orc_stronghold_mat_0', //wall_B_orc_stronghold_mat_0',
-		},
-		wallDouble: {
-			meshId: 'wall_C_orc_stronghold_mat_0',
-		},
-		column1: {
-			meshId: 'columnA11_orc_stronghold_mat_0', //columnA_orc_stronghold_mat_0',
-		},
-		floor1: {
-			meshId: 'floortileA19_floor_A_mat_0', //floortileA1_floor_A_mat_0', //'floortileA_floor_A_mat_0',
-		},
-		floor2: {
-			meshId: 'floortileA_alt_floor_A_alt_mat_0',
-		},
-		floor3: {
-			meshId: 'floortileB_floor_B_mat_0',
-		},
-		lantern: {
-			meshId: 'firepit_orc_stronghold_mat_0',
-			light: 8,
-		},
-		justLight: {
-			meshId: null,
-			light: 8,
+	const Direction = new class {
+		constructor() {
+			this.add = [
+				{ x:0,  y:-1 },
+				{ x:1,  y:-1 },
+				{ x:1,  y:0 },
+				{ x:1,  y:1 },
+				{ x:0,  y:1 },
+				{ x:-1, y:1 },
+				{ x:-1, y:0 },
+				{ x:-1, y:-1 }
+			];
+			this.count = 8;
+		}
+		fromCommand(command) {
+			let c2d = { N: 0, NE: 1, E: 2, SE: 3, S: 4, SW: 5, W: 6, NW: 7 };
+			return ( c2d[Command[command]] != undefined ? c2d[Command[command]] : false );
+		}
+		toCommand(dir) {
+			let d2c = [ Command.N, Command.NE, Command.E, Command.SE, Command.S, Command.SW, Command.W, Command.NW ];
+			if( dir === false || dir < 0 || dir >= Direction.count ) { debugger; }
+			return d2c[dir];
+		
+		}
+		predictable(dx,dy) {
+			let dirId = { N: 0, NE: 1, E: 2, SE: 3, S: 4, SW: 5, W: 6, NW: 7 };
+			if( dy < 0 ) return dx==0 ? dirId.N : (dx<0 ? dirId.NW : dirId.NE);
+			if( dy > 0 ) return dx==0 ? dirId.S : (dx<0 ? dirId.SW : dirId.SE);
+			return dx==0 ? false : (dx<0 ? dirId.W : dirId.E);
+		} 
+		natural(dx,dy) {
+			let ax = Math.abs(dx);
+			let ay = Math.abs(dy);
+			if( ax != ay ) {
+				// We want to flatten our trajectory sometimes.
+				if( Math.rand(0,ax+ay)<Math.max(ax,ay) ) {
+					if( ax < ay ) { dx=0; } else { dy=0; }
+				}
+			}
+			return this.predictable(dx,dy);
 		}
 	};
 
+	let SymbolToType = {
+		'#': {
+			isWall: true
+		},
+		'.': {
+			isFloor: true
+		},
+		'+': {
+			isDoor: true
+		},
+		':': {
+			isFloor: true
+		},
+
+	}
+	return {
+		Tile: Tile,
+		Direction: Direction,
+		SymbolToType: SymbolToType,
+		globalMapString: globalMapString
+	}
+
+});
+
+Module.add('bab',()=>{
+	let Bab = {};
+
+	Bab.Lookup = {
+		wall: {
+			short: {
+				meshTypeId: 'wall_A_orc_stronghold_mat_0',
+				isWall: true,
+				width: 0.5,
+			},
+			standard: {
+				meshTypeId: 'wall_B_orc_stronghold_mat_0',
+				isWall: true,
+				width: 1.0,
+			},
+			double: {
+				meshTypeId: 'wall_C_orc_stronghold_mat_0',
+				isWall: true,
+				width: 2.0,
+			},
+			glowingRunes: {
+				meshTypeId: 'wall_deco_orc_stronghold_mat_0',
+				isWall: true,
+				width: 1.0,
+			}
+		},
+		wallDecor: {
+			hangingFlag: {
+				meshTypeId: 'wall_deco_object_orc_stronghold_mat_0',
+			}
+		},
+		column: {
+			standard: {
+				meshTypeId: 'columnA_orc_stronghold_mat_0',
+			},
+		},
+		floor: {
+			a: {
+				meshTypeId: 'floortileA_floor_A_mat_0',
+			},
+			b: {
+				meshTypeId: 'floortileA_alt_floor_A_alt_mat_0',
+			},
+			woodWithMetal: {
+				meshTypeId: 'floortileB_floor_B_mat_0',
+			}
+		},
+		door: {
+			standard: {
+				meshTypeId: 'door_roomtoroom_orc_stronghold_mat_0',
+				size: 2,
+			},
+			large: {
+				meshTypeId: 'door_leveltolevel_orc_stronghold_mat_0',
+				size: 3,
+			},
+			huge: {
+				meshTypeId: 'dungeon_entrance_frame_orc_stronghold_mat_0',
+				size: 4,
+			}
+		},
+		rock: {
+			a: {
+				meshTypeId: 'rockA_orc_stronghold_mat_0',
+			},
+			b: {
+				meshTypeId: 'rockB_orc_stronghold_mat_0',
+				size: 1.0,
+			},
+			c: {
+				meshTypeId: 'rockC_orc_stronghold_mat_0',
+				size: 0.5,
+			},
+			d: {
+				meshTypeId: 'rockD_orc_stronghold_mat_0',
+				size: 1.0,
+			},
+			e: {
+				meshTypeId: 'rockE_orc_stronghold_mat_0',
+				size: 0.5,
+			},
+			aWeird: {
+				meshTypeId: 'rockXtraA_orc_stronghold_mat_0',
+				zAltitude: 0.5,
+				size: 0.5,
+			},
+			bWeird: {
+				meshTypeId: 'rockXtraA_orc_stronghold_mat_0',
+				zAltitude: 1.3,
+				size: 0.5,
+			},
+			cWeird: {
+				meshTypeId: 'rockXtraC_orc_stronghold_mat_0',
+				zAltitude: 0.3,
+				size: 0.5,
+			},
+			a3: {
+				meshTypeId: 'rockA3_orc_stronghold_mat_0',
+				size: 3.0,
+			},
+			a2: {
+				meshTypeId: 'rockA2_orc_stronghold_mat_0',
+				size: 2.0,
+			}
+		},
+		item: {
+			lantern: {
+				meshTypeId: null,
+				light: 8,
+			},
+			justLight: {
+				meshTypeId: null,
+				light: 8,
+			},
+			noLight: {
+				meshTypeId: null,
+			}
+		}
+	};
+
+	Bab.PropTypeHash = {};
+	Object.each( Bab.Lookup, (majorData,majorId) => {
+		Object.each( majorData, (minorData,minorId) => {
+			Bab.PropTypeHash[majorId+String.capitalize(minorId)] = minorData;
+		});
+	});
 
 	Bab.Mesh = class {
-		constructor(meshId) {
-			let mesh = Bab.Mesh.list.find( mesh=>mesh.id==meshId );
-			console.log("MESH",mesh);
-			this.instance = mesh.createInstance("prop" + Math.random());
-/*
-			let i = this.instance;
-			let m = mesh;
-			i.rotation.x = m.rotation.x;
-			i.rotation.y = m.rotation.y;
-			i.rotation.z = m.rotation.z;
-			i.rotationQuaternion.w = m.rotationQuaternion.w;
-			i.rotationQuaternion.x = m.rotationQuaternion.x;
-			i.rotationQuaternion.y = m.rotationQuaternion.y;
-			i.rotationQuaternion.z = m.rotationQuaternion.z;
-			i.setPivotMatrix = m.setPivotMatrix;
-
-			this.instance.absoluteRotationQuaternion.w = 0;
-			this.instance.absoluteRotationQuaternion.z = 1;
-			console.log("INSTANCE",this.instance);
-			//debugger;
-*/
+		constructor(meshTypeId) {
+			let meshType = Bab.MeshTypeHash[meshTypeId];
+			this.instance = meshType.createInstance("prop" + Math.random());
 		}
 		set position(value) {
 			return this.instance.position = value;
@@ -165,7 +302,24 @@ window.addEventListener('DOMContentLoaded', function(){
 		rotate(...args) {
 			this.instance.rotate(...args);
 		}
+		set scale(value) {
+			this.instance.scaling.x = value;
+			this.instance.scaling.z = value;
+		}
 	};
+
+	Bab.Camera = class {
+		constructor(babPos) {
+			this.camera = new BABYLON.TargetCamera('gameCamera', babPos, Entity.scene);
+			this.camera.setTarget( new BABYLON.Vector3(0,0,1) );
+		}
+		setRotation(valueRads) {
+			this.camera.rotation.y = valueRads;
+		}
+		setNod(valueRads) {
+			this.camera.rotation.x = valueRads;
+		}
+	}
 
 	Bab.Light = class {
 		constructor(scene) {
@@ -188,12 +342,19 @@ window.addEventListener('DOMContentLoaded', function(){
 			this.light.rotate(...args);
 		}
 	}
+	return {
+		Bab: Bab
+	}
+
+});
+
+Module.add( 'Obj3D', ()=>{
 
 	let Entity = {};
 	Entity.Base = class {
 		constructor() {
 			this.babPos = new BABYLON.Vector3(0,0,0);
-			this._facing = 0;
+			this._rotation = 0;
 		}
 		get x() {
 			return this.babPos.x/Entity.unit;
@@ -213,24 +374,45 @@ window.addEventListener('DOMContentLoaded', function(){
 		set zAltitude(value) {
 			this.babPos.y = value * Entity.unit;
 		}
+		setRotation(rads) {
+			console.assert( Number.isFinite(rads) );
+			this._rotation = rads;
+		}
+		getRotation() {
+			console.assert( Number.isFinite(this._rotation) );
+			return this._rotation;
+		}
+		set rotation(rads) {
+			this.setRotation(rads);
+		}
+		get rotation() {
+			return this.getRotation();
+		}
 		set facing(degrees) {
-			this._facing = degrees;
+			this.setRotation( degrees/360*Math.PI*2 );
 		}
 		get facing() {
-			return this._facing;
+			return this.getRotation()/(Math.PI*2)*360;
+		}
+		get facingDxDy() {
+			return [ Math.cos(this._rotation-Math.PI*0.5), Math.sin(this._rotation-Math.PI*0.5) ];
 		}
 		setXY(x,y,z=null)	{ this.x=x; this.y=y; if(z!==null) this.zAltitude=z; return this; }
+		addXY(x,y,z=null)	{ this.x+=x; this.y+=y; if(z!==null) this.zAltitude+=z; return this; }
 		setFacing(degrees)	{ this.facing = degrees; return this; }
 		setLight(value)		{ this.light = value; return this; }
+		setScale(value)		{ this.scale = value; return this; }
 	}
 
 	Entity.Mesh = class extends Entity.Base {
 		constructor(propTypeId,scene=Entity.scene) {
 			super();
+			console.assert( propTypeId );
+			this.propTypeId = propTypeId;
 			if( propTypeId ) {
 				let type = Bab.PropTypeHash[propTypeId];
-				if( type.meshId ) {
-					this.babMesh = new Bab.Mesh(type.meshId);
+				if( type.meshTypeId ) {
+					this.babMesh = new Bab.Mesh(type.meshTypeId);
 					this.babMesh.position = this.babPos;
 				}
 				if( type.light ) {
@@ -243,12 +425,19 @@ window.addEventListener('DOMContentLoaded', function(){
 		get scene() {
 			console.assert(false);
 		}
-		set facing(degrees) {
-			super.facing = degrees;
-			this.babMesh.rotate(BABYLON.Axis.Y, (this._facing/360) * Math.PI*2, BABYLON.Space.WORLD);
+		setRotation(rads) {
+			super.setRotation(rads);
+			if( this.babMesh ) {
+				this.babMesh.rotate(BABYLON.Axis.Y, this._rotation, BABYLON.Space.WORLD);
+			}
 		}
 		set light(value) {
-			this.babLight.intensity = value * 500*Entity.unit;
+			this.babLight.intensity = value * Entity.unitLight;
+		}
+		set scale(value) {
+			if( this.babMesh ) {
+				this.babMesh.scale = value;
+			}
 		}
 	}
 
@@ -260,115 +449,75 @@ window.addEventListener('DOMContentLoaded', function(){
 		add(meshId,dx,dy,facing=0) {
 			let mesh = new Entity.Mesh( meshId ).setXY( this.x+dx, this.y+dy ).setFacing(facing);
 			this.list.push( mesh );
+			return mesh;
 		}
 		setWalls(n,e,s,w) {
-			if( !n ) this.add( 'wallStandard',  0.0, -0.5, 0 );
-			if( !e ) this.add( 'wallStandard',  0.5,  0.0, 90 );
-			if( !s ) this.add( 'wallStandard',  0.0,  0.5, 180 );
-			if( !w ) this.add( 'wallStandard', -0.5,  0.0, 270 );
-			//if( !n || !e ) this.add( 'column1',  0.5, -0.5 );
-			//if( !s || !e ) this.add( 'column1',  0.5,  0.5 );
-			//if( !n || !w ) this.add( 'column1', -0.5, -0.5 );
-			//if( !s || !w ) this.add( 'column1', -0.5,  0.5 );
+			if( n && s && e && w ) {
+				this.add( 'rockA2',  0, -0.75 );
+				return;
+			}
+			let wall = 'wallStandard';
+			if( !n && !e && !w ) {
+				n=true;
+			}
+			if( !s && !e && !w ) {
+				s=true;
+			}
+			if( !e && !n && !s ) {
+				e=true;
+			}
+			if( !w && !n && !s ) {
+				w=true;
+			}
+			if( (!n && !e) || (!n && !w) || (!s && !e) || (!s && !w) ) {
+				this.add( 'columnStandard',  0, 0 ).setScale(0.5);
+				this.add( 'floorA', 0, 0 );
+				wall = 'wallShort';
+				if( n && !w ) this.add( wall, 0, -0.25, 270 );
+				if( n && !e ) this.add( wall, 0, -0.25,  90 );
+				if( s && !w ) this.add( wall, 0,  0.25, 270 );
+				if( s && !e ) this.add( wall, 0,  0.25,  90 );
+				if( w && !n ) this.add( wall, -0.25, 0,   0 );
+				if( w && !s ) this.add( wall, -0.25, 0, 180 );
+				if( e && !n ) this.add( wall,  0.25, 0,   0 );
+				if( e && !s ) this.add( wall,  0.25, 0, 180 );
+				return;
+			}
+			if( !n ) this.add( wall, 0, 0, 0 );
+			if( !e ) this.add( wall, 0, 0, 90 );
+			if( !s ) this.add( wall, 0, 0, 180 );
+			if( !w ) this.add( wall, 0, 0, 270 );
 			return this;
 		}
 	}
 
+	Entity.Text = class extends Entity.Base {
+		constructor(id,text) {
+			super();
+			this.text = text;
+			let option = { width: text.length*12, height: 12, subdivisions: 25 }
+			this.ground = BABYLON.MeshBuilder.CreateGround("ground1", option, Entity.scene);
 
-	Entity.Camera = class extends Entity.Base {
+			this.texture = new BABYLON.DynamicTexture(id, option, Entity.scene);
+			this.material = new BABYLON.StandardMaterial("Mat", Entity.scene);
+			this.material.diffuseTexture = this.texture;
+			this.ground.material = this.material;
+			let pos = {x:0,y:0};
+			let font = "normal 12px monospace";
+			this.texture.drawText(this.text, pos.x, pos.y, font, 'white', 'black', true, true);
+		}
+	}
+
+
+
+	Entity.CameraOverhead = class extends Entity.Base {
 		constructor(scene) {
 			super();
 			this.camera = new BABYLON.FreeCamera('gameCamera', this.babPos, scene)
 		}
-		setTarget(entity) {
-			this.camera.setTarget( entity.babPos );
-		}
-	}
-
-	let Manager = class {
-		constructor(scene) {
-			this.scene = scene;
-			Entity.scene = this.scene;
-			this.meshList = null;
-			this.started = false;
-		}
-		load() {
-			BABYLON.SceneLoader.ImportMesh("", "./OrcStronghold/", "scene.gltf", this.scene, (meshList) => {
-				meshList.forEach( mesh=>console.log(mesh.id) );
-				meshList.forEach( mesh=>mesh.isVisible = true );
-				meshList.forEach( mesh=>mesh.setParent(null) );
-				Bab.Mesh.list = meshList;
-				this.meshList = meshList;
-			});
-		}
-		add(entity) {
-			return entity;
-		}
-		start() {
-			this.started = true;
-			Entity.unit = 200;
-
-			let s0 = 
-				'########\n'+
-				'#   #  #\n'+
-				'#      #\n'+
-				'#   #  #\n'+
-				'## #####\n'+
-				'## ##  #\n'+
-				'##     #\n'+
-				'########\n';
-
-			let map0 = new SimpleMap( s0 );
-			let line = [];
-			map0.traverse( (x,y,type) => {
-				let symbol = map0.tileSymbolGetFastUnasfe(x,y);
-				line[y] = line[y] || '';
-				line[y] += symbol+symbol+symbol;
-			});
-			let s = '';
-			for( let y=0 ; y<line.length ; ++y ) {
-				s += line[y]+'\n';
-				s += line[y]+'\n';
-				s += line[y]+'\n';
-			}
-
-			let map = new SimpleMap(s);
-
-			map.traverse( (x,y,type) => {
-				if( type.isWall ) {
-					let nType = map.tileTypeGet(x,y-1);
-					let n = !nType || nType.isWall;
-					let eType = map.tileTypeGet(x+1,y);
-					let e = !eType || eType.isWall;
-					let sType = map.tileTypeGet(x,y+1);
-					let s = !sType || sType.isWall;
-					let wType = map.tileTypeGet(x-1,y);
-					let w = !wType || wType.isWall;
-					this.add( new Entity.Wall().setXY(x,y).setWalls(n,e,s,w) );
-				}
-				else {
-					this.add( new Entity.Mesh('floor1').setXY(x,y) );					
-				}
-			});
-
-//			let x = 0;
-//			let y = -3;
-
-//			this.add( new Entity.Mesh('wallStandard').setXY(x,y-1).setFacing(0) );
-//			this.add( new Entity.Mesh('wallStandard').setXY(x-1,y).setFacing(90) );
-//			this.add( new Entity.Mesh('wallStandard').setXY(x+1,y).setFacing(270) );
-//			this.add( new Entity.Mesh('floor1').setXY(x,y) );
-			this.add( new Entity.Mesh('lantern').setXY(6,3,0.5) );
-
-			this.player = this.add( new Entity.Mesh('justLight').setXY(6,6,0.5) );
-			this.camera = this.add( new Entity.Camera() );
-
-			var lightAmbient = new BABYLON.HemisphericLight('light1', new BABYLON.Vector3(0,1,0), this.scene);
-			lightAmbient.setEnabled(true)
-			lightAmbient.intensity = 0.1; //1;
-
+		addListener(player) {
+			this.player = player;
 			window.addEventListener('keypress',(event)=>{
-				let player = this.player;
 				switch( event.key ) {
 					case 'w': player.y -= 1; break;
 					case 's': player.y += 1; break;
@@ -380,22 +529,334 @@ window.addEventListener('DOMContentLoaded', function(){
 				//data.zoomAdjust(-evt.deltaY);
 				event.preventDefault();
 			});
-
+			return this;
+		}
+		setTarget(entity) {
+			this.camera.setTarget( entity.babPos );
 		}
 		tick() {
-			if( !this.meshList ) {
+			let cameraHeight = 4;
+			let cameraRange  = 4;
+			this.setXY( this.player.x, this.player.y+cameraRange );
+			this.zAltitude = this.player.zAltitude+cameraHeight;
+			this.setTarget(this.player);
+		}
+	}
+
+	Entity.Player = class extends Entity.Mesh {
+		constructor(meshTypeId,eyeHeight,speed) {
+			super(meshTypeId);
+			this.setXY(12,12,eyeHeight);
+			console.assert( Entity.unit );
+			this.speedForward  = speed;
+			this.speedSideways = speed;
+			this.forward  = 0;
+			this.sideways = 0;
+			this.nod = 0;
+		}
+		tick(dt) {
+			let [dx,dy] = this.facingDxDy;
+			console.assert( Number.isFinite(dt) );
+			console.assert( Number.isFinite(dx) && Number.isFinite(dy) );
+			console.assert( Number.isFinite(this.x) && Number.isFinite(this.y) );
+			console.assert( Number.isFinite(this.forward) && Number.isFinite(this.sideways) );
+			console.assert( Number.isFinite(this.speedForward) && Number.isFinite(this.speedSideways) );
+			this.addXY(  dx*this.forward*this.speedForward*dt,  dy*this.forward*this.speedForward*dt );
+			console.assert( Number.isFinite(this.x) && Number.isFinite(this.y) );
+			this.addXY( dy*this.sideways*this.speedSideways*dt, -dx*this.sideways*this.speedSideways*dt );
+			console.assert( Number.isFinite(this.x) && Number.isFinite(this.y) );
+		}
+	}
+
+	Entity.CameraFirstPerson = class extends Entity.Base {
+		constructor(observer) {
+			super();
+			this.babCam   = new Bab.Camera(this.babPos);
+			this.observer = observer;
+		}
+		setRotation(rads) {
+			console.assert( Number.isFinite(rads) );
+			super.setRotation( rads );
+			this.babCam.setRotation( this._rotation );
+		}
+		setNod(rads) {
+			console.assert( Number.isFinite(rads) );
+			this.babCam.setNod( rads );
+		}
+		tick(dt) {
+			console.assert( Number.isFinite(this.observer.x) && Number.isFinite(this.observer.y) );
+			console.assert( Number.isFinite(this.observer.zAltitude) );
+			console.assert( Number.isFinite(this.observer.facing) );
+			this.setXY( this.observer.x, this.observer.y );
+			this.zAltitude	= this.observer.zAltitude;
+			this.facing		= this.observer.facing;
+			this.setNod( this.observer.nod );
+		}
+	}
+
+
+	class TweakMap extends SimpleMap {
+		constructor(...args) {
+			super(...args);
+			this.allowUnknown = true;
+		}
+	}
+
+
+	Entity.MapMaker = class extends Entity.Base {
+		constructor(mapString) {
+			super();
+			this.map = new TweakMap( mapString );
+		}
+		triple() {
+			let tFloor = '.';
+			let tWall  = '#';
+			let tDoor  = '+';
+
+			let target = new TweakMap(SimpleMap.fillTextMap(this.map.xLen*3,this.map.yLen*3,tFloor));
+
+			this.map.traverse( (x,y,type) => {
+				let tx = x*3;
+				let ty = y*3;
+				let symbol = this.map.tileSymbolGetFastUnasfe(x,y);
+				let region = [tx,ty,3,3];
+				if( symbol==tWall ) {
+					target.traverseRegion(...region,(tx,ty)=>{
+						target.tileSymbolSet(tx,ty,tWall);
+					});
+				}
+				if( symbol==tDoor ) {
+					if( this.map.tileSymbolGet(x,y-1)==tFloor ) {
+						target.tileSymbolSet(tx+0,ty+1,tWall);
+						target.tileSymbolSet(tx+1,ty+1,tDoor);
+						target.tileSymbolSet(tx+2,ty+1,tWall);
+					}
+					if( this.map.tileSymbolGet(x-1,y)==tFloor ) {
+						target.tileSymbolSet(tx+1,ty+0,tWall);
+						target.tileSymbolSet(tx+1,ty+1,tDoor);
+						target.tileSymbolSet(tx+1,ty+2,tWall);
+					}
+				}
+			});
+			this.map = target;
+			return this;
+		}
+		make(mapStr) {
+			let map = this.map;
+			map.traverse( (x,y,type) => {
+				if( type.isWall ) {
+					let nType = map.tileTypeGet(x,y-1);
+					let n = !nType || nType.isWall;
+					let eType = map.tileTypeGet(x+1,y);
+					let e = !eType || eType.isWall;
+					let sType = map.tileTypeGet(x,y+1);
+					let s = !sType || sType.isWall;
+					let wType = map.tileTypeGet(x-1,y);
+					let w = !wType || wType.isWall;
+					new Entity.Wall().setXY(x,y).setWalls(n,e,s,w);
+				}
+				if( type.isDoor ) {
+					let doorFace = map.tileTypeGet(x-1,y).isFloor ? 90 : 0;
+					new Entity.Mesh('doorStandard').setXY(x,y).setFacing( doorFace );
+					new Entity.Mesh('doorStandard').setXY(x,y).setFacing( doorFace+180 );
+					new Entity.Mesh('floorA').setXY(x,y);
+				}
+				if( type.isFloor ) {
+					new Entity.Mesh('floorA').setXY(x,y);
+				}
+			});
+			return this;
+		}
+	}
+
+	Entity.Demo = class extends Entity.Base {
+		constructor(meshTypeHash) {
+			super();
+			this.meshTypeHash = meshTypeHash;
+		}
+		create() {
+			let groupList = ['door','rock','entrance','wall','floor','*'];
+			let done = {};
+			let span = 6;
+			groupList.forEach( (groupId,yIndex) => {
+				let list = Object.values(this.meshTypeHash).filter( meshType => {
+					return !done[meshType.id] && (groupId=='*' || meshType.id.indexOf(groupId) >= 0);
+				});
+				list.forEach( (meshType,xIndex) => {
+					console.log(xIndex,meshType.id,meshType.idOriginal);
+					let pos = { x: xIndex*span, y: yIndex*span };
+					// Face it south so my default camera can see it.
+					let m = new Entity.Mesh( meshType.id ).setXY(pos.x,pos.y).setFacing(180);
+					new Entity.Mesh( 'floortileA' ).setXY(pos.x,pos.y).setFacing(180);
+					//new Entity.Text( 'T'+mesh.id, mesh.id ).setXY(pos.x,pos.y,-0.4);
+					done[meshType.id] = true;
+				});
+			});
+		}
+	}
+
+	return {
+		Entity: Entity
+	}
+
+});
+
+window.addEventListener('DOMContentLoaded', function(){
+
+	let dad = mesh => {
+		if( !mesh.parent || !mesh._geometry ) {
+			return null
+		}
+		while( mesh.parent ) {
+			if( mesh.parent.id == 'RootNode' ) {
+				return mesh;
+			}
+			mesh = mesh.parent;
+		}
+		console.assert(false);
+	}
+
+
+	let Manager = class {
+		constructor(scene) {
+			this.scene = scene;
+			Entity.scene = this.scene;
+			this.started = false;
+		}
+		load() {
+			BABYLON.SceneLoader.ImportMesh("", "./OrcStronghold/", "scene.gltf", this.scene, (meshList) => {
+				let meshTypeHash = {};
+				meshList.forEach( mesh=> {
+					let meshType = dad(mesh);
+					if( !meshType ) {
+						return;
+					}
+					meshTypeHash[mesh.id] = mesh;
+				});
+				Bab.MeshTypeHash = meshTypeHash;
+
+				// This must happen AFTER the processing above, so that the unique parents of all meshes can be found.
+				meshList.forEach( mesh=>mesh.isVisible = false );
+				meshList.forEach( mesh=>mesh.setParent(null) );
+			});
+		}
+		add(entity) {
+			return entity;
+		}
+		start() {
+			this.started = true;
+			Entity.unit = 200;
+			Entity.unitLight = Entity.unit * 500;
+
+			let mapString = globalMapString;
+
+			let mapMaker = new Entity.MapMaker(mapString);
+			mapMaker.triple().make();
+//			new Entity.Demo(Bab.MeshTypeHash).setXY(0,0).create();
+
+			this.add( new Entity.Mesh('itemLantern').setXY(14,14,0.5) );
+
+			this.player = new Entity.Player('itemJustLight',1.0,4);
+//			this.camera = this.add( new Entity.CameraOverhead().addListener(this.player) );
+
+			this.camera = new Entity.CameraFirstPerson(this.player);
+			var lightAmbient = new BABYLON.HemisphericLight('light1', new BABYLON.Vector3(0,1,0), this.scene);
+			lightAmbient.setEnabled(true)
+			lightAmbient.intensity = 0.00;
+
+			let canvas = document.getElementById('renderCanvas');
+			this.controls = new Controls(canvas,this.player);
+			this.controls.addListener();
+			this.controls.pointerLockRequest();
+			this.controls.keyDef['w'] = (target,value) => target.forward = value;
+			this.controls.keyDef['s'] = (target,value) => target.forward = -value;
+			this.controls.keyDef['a'] = (target,value) => target.sideways = value;
+			this.controls.keyDef['d'] = (target,value) => target.sideways = -value;
+			this.controls.mouseDef.move = (target,dx,dy) => {
+				target.facing += dx;
+				target.nod += dy*0.01;
+			}
+
+		}
+		tickRender() {
+			if( !Bab.MeshTypeHash ) {
 				return;
 			}
 			if( !this.started ) {
 				this.start();
 			}
 
-			this.camera.setXY( this.player.x, this.player.y+3 );
-			this.camera.zAltitude = this.player.zAltitude+4*2;
-			this.camera.setTarget(this.player);
 			this.scene.render();
 		}
+		tickSim(dt) {
+			if( !this.started ) {
+				return;
+			}
+			this.player.tick(dt);
+			this.camera.tick(dt);
+		}
 	}
+
+	class Controls {
+		constructor(canvas,target) {
+			console.assert(canvas);
+			console.assert(target);
+			this.target = target;
+			this.canvas = canvas;
+			this.pointerLockElement = null;
+			this.keyDef = {};
+			this.mouseDef = {};
+		}
+		get supportsPointerLock() {
+			return 'pointerLockElement' in document || 'mozPointerLockElement' in document || 'webkitPointerLockElement' in document;
+		}
+		isPointerLocked() {
+			return document.pointerLockElement === this.pointerLockElement ||
+				document.mozPointerLockElement === this.pointerLockElement ||
+				document.webkitPointerLockElement === this.pointerLockElement;
+		}
+		pointerLockRequest(element=this.canvas) {
+			this.pointerLockElement = element;
+			element.requestPointerLock = element.requestPointerLock ||
+				element.mozRequestPointerLock ||
+				element.webkitRequestPointerLock;
+			element.requestPointerLock();
+		}
+		pointerTrack(event) {
+			let dx = event.movementX || event.mozMovementX || event.webkitMovementX || 0;
+  			let dy = event.movementY || event.mozMovementY || event.webkitMovementY || 0;
+  			return [dx,dy];
+  		}
+  		sendKey(key,value) {
+			if( !this.keyLookup.includes(event.key) ) {
+				return;
+			}
+			this.target.keyHash[key] = value;
+  		}
+		addListener(element=this.canvas) {
+			element.addEventListener('keydown',(event)=>{
+				if( this.keyDef[event.key] ) {
+					this.keyDef[event.key](this.target,1);
+				}
+			});
+			element.addEventListener('keyup',(event)=>{
+				if( this.keyDef[event.key] ) {
+					this.keyDef[event.key](this.target,0);
+				}
+			});
+			element.addEventListener('mousemove',(event)=>{
+				if( !this.isPointerLocked ) {
+					return;
+				}
+				let [dx,dy] = this.pointerTrack(event);
+				if( this.mouseDef.move && (dx||dy) ) {
+					this.mouseDef.move(this.target,dx,dy);
+				}
+			});
+			return this;
+		}
+	}
+
 
 	{
 		Module.realize();
@@ -407,8 +868,13 @@ window.addEventListener('DOMContentLoaded', function(){
 		manager.load();
 
 		// run the render loop
-		engine.runRenderLoop(function(){
-			manager.tick();
+		engine.runRenderLoop( () => {
+			manager.tickRender();
+		});
+
+		Time.animationFrameTicker( dt => {
+			dt = Math.min( 1/15, dt / 1000.0 );
+			manager.tickSim(dt);
 		});
 
 		// the canvas/window resize event handler

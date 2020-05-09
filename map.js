@@ -123,6 +123,17 @@ class SimpleMap {
 		});
 		return pos;
 	}
+	traverseRegion(sx,sy,w,h,fn) {
+		for( let y=sy ; y<sy+h ; ++y ) {
+			for( let x=sx ; x<sx+w ; ++x ) {
+				if( this.inBounds(x,y) ) {
+					if( fn(x,y,x-sx,y-sy) === false ) return;
+				}
+			}
+		}
+		return this;
+	}
+
 	traverseNear(cx,cy,dist,fn) {
 		cx = Math.toTile(cx);
 		cy = Math.toTile(cy);
@@ -242,6 +253,9 @@ class SimpleMap {
 			return false;
 		}
 		let type = SymbolToType[symbol];
+		if( !type && this.allowUnknown ) {
+			return false;
+		}
 		console.assert(type);
 		return type;
 	}
