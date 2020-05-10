@@ -500,7 +500,16 @@ Module.add( 'Obj3D', ()=>{
 			super.setRotation(rads);
 			if( this.babMesh ) {
 				//this.babMesh.instance.rotation.y = rads;
-				this.babMesh.rotate(BABYLON.Axis.Y, this._rotation, BABYLON.Space.WORLD);
+
+//				let quaternion = new BABYLON.Quaternion.RotationAxis(BABYLON.Axis.Y, rads);
+				rads += Math.PI;
+				let quaternion = new BABYLON.Quaternion.RotationYawPitchRoll(rads, 0, 0);
+				Entity.Mesh.flip = Entity.Mesh.flip || new BABYLON.Quaternion.RotationYawPitchRoll(0, Math.PI, 0);
+ 				quaternion.multiplyInPlace(Entity.Mesh.flip);
+   
+				this.babMesh.instance.rotationQuaternion = quaternion;
+
+//				this.babMesh.rotate(BABYLON.Axis.Y, this._rotation, BABYLON.Space.WORLD);
 			}
 		}
 		set light(value) {
@@ -785,7 +794,7 @@ Module.add( 'Obj3D', ()=>{
 					new Entity.Mesh('floorA').setXY(x,y);
 				}
 				if( type.isLight ) {
-					new Entity.Mesh('itemJustLight').setXY(x,y);
+					new Entity.Mesh('itemJustLight').setXY(x,y,1.5);
 				}
 				if( type.isFloor ) {
 					new Entity.Mesh('floorA').setXY(x,y);
@@ -942,7 +951,7 @@ window.addEventListener('DOMContentLoaded', function(){
 		start() {
 			this.started = true;
 			Entity.unit = 1;
-			Entity.unitLight = Entity.unit*1;
+			Entity.unitLight = Entity.unit*1 * 2;
 
 			let mapString = globalMapString;
 
@@ -962,7 +971,7 @@ window.addEventListener('DOMContentLoaded', function(){
 			});
 
 
-			this.player = new Entity.Player('itemJustLight',{
+			this.player = new Entity.Player('itemNoLight',{
 				x: 12,
 				y: 12,
 				eyeHeight: 1.0,
@@ -975,9 +984,15 @@ window.addEventListener('DOMContentLoaded', function(){
 //			this.camera = this.add( new Entity.CameraOverhead().addListener(this.player) );
 
 			this.camera = new Entity.CameraFirstPerson(this.player);
-			var lightAmbient = new BABYLON.HemisphericLight('light1', new BABYLON.Vector3(0,1,0), this.scene);
-			lightAmbient.setEnabled(false)
-			lightAmbient.intensity = 0.50;
+
+//			var lightAmbient = new BABYLON.HemisphericLight('light1', new BABYLON.Vector3(0.25,1,0.25).normalize(), this.scene);
+//			lightAmbient.setEnabled(true)
+//			lightAmbient.intensity = 1.0; //0.50;
+
+
+//			let lightDirectional = new BABYLON.DirectionalLight("DirectionalLight", (new BABYLON.Vector3(0.25, -1, 0.25)).normalize(), this.scene);
+//			lightDirectional.setEnabled(true)
+//			lightDirectional.intensity = 1.0;
 
 			let canvas = document.getElementById('renderCanvas');
 			this.controls = new Controls(canvas,this.player);
