@@ -31,7 +31,38 @@
 <canvas id="renderCanvas"></canvas>
 <script >	
 
+var AbstractMesh = BABYLON.AbstractMesh;
+
+/*
+AbstractMesh.prototype.lookAt = function (targetPoint, yawCor, pitchCor, rollCor, space) {
+	/// <summary>Orients a mesh towards a target point. Mesh must be drawn facing user.</summary>
+	/// <param name="targetPoint" type="Vector3">The position (must be in same space as current mesh) to look at</param>
+	/// <param name="yawCor" type="Number">optional yaw (y-axis) correction in radians</param>
+	/// <param name="pitchCor" type="Number">optional pitch (x-axis) correction in radians</param>
+	/// <param name="rollCor" type="Number">optional roll (z-axis) correction in radians</param>
+	/// <returns>Mesh oriented towards targetMesh</returns>
+	if (yawCor === void 0) { yawCor = 0; }
+	if (pitchCor === void 0) { pitchCor = 0; }
+	if (rollCor === void 0) { rollCor = 0; }
+	if (space === void 0) { space = BABYLON.Space.LOCAL; }
+	var dv = AbstractMesh._lookAtVectorCache;
+	var pos = space === BABYLON.Space.LOCAL ? this.position : this.getAbsolutePosition();
+	targetPoint.subtractToRef(pos, dv);
+	var yaw = Math.atan2(dv.x, dv.z);
+	var len = Math.sqrt(dv.x * dv.x + dv.z * dv.z);
+	var pitch = Math.atan2(len, dv.y) - Math.PI*.5;
+	this.rotationQuaternion = this.rotationQuaternion || new BABYLON.Quaternion();
+	BABYLON.Quaternion.RotationYawPitchRollToRef(yaw + yawCor, pitch + pitchCor, rollCor, this.rotationQuaternion);
+};
+*/
+
+let ADJ = 0.005;
+
 Module.add( 'main', ()=> {
+	Math.clamp = function(value,min,max) {
+		return Math.max(min,Math.min(max,value));
+	}
+
 	String.capitalize = function(s) {
 		return s.charAt(0).toUpperCase() + s.slice(1);
 	}
@@ -48,15 +79,15 @@ Module.add( 'main', ()=> {
 	`############################################\n`+
 	`#.....######################################\n`+
 	`#####+##............########################\n`+
-	`###................########::::#############\n`+
-	`###........N.......##...####:::#############\n`+
-	`##........NCN......##...#::::::##:##########\n`+
+	`###.*.*............########::::#############\n`+
+	`###.....::.N.......##...####:::#############\n`+
+	`##......::NCN......##...#::::::##:##########\n`+
 	`##.........N.....­:::­..:::::::##::#########\n`+
 	`##...4.......###+#::::..::::::::::::.#######\n`+
 	`##..444......###.:::::..:::::::::::#.#######\n`+
 	`##..444......##..:::::&#::::::::::::..######\n`+
 	`##...4...#.#####.­:::­.::::::::::::.....####\n`+
-	`##.......#.#¥*¥#........:::::::::::.......##\n`+
+	`##.......#.#¥.¥#........:::::::::::.......##\n`+
 	`##.....###.#¥¥¥#........#::::::::::.......##\n`+
 	`##....####.&#..#..N.......::::::::...MM...##\n`+
 	`###..######.&#.#.NCN.......::::::.##.MM...##\n`+
@@ -68,7 +99,7 @@ Module.add( 'main', ()=> {
 	`#######&........U.......+I+....###:::::...##\n`+
 	`######&.####..C.°.C.....#+#.......­:::­...##\n`+
 	`######.##¥¥#............................####\n`+
-	`######.#.¥*#............................####\n`+
+	`######.#.¥.#............................####\n`+
 	`######...¥¥#......2............C........####\n`+
 	`############.....2::22...........N......####\n`+
 	`##########......2:::::2........°UN.....#####\n`+
@@ -148,7 +179,12 @@ Module.add( 'main', ()=> {
 			isDoor: true
 		},
 		':': {
-			isFloor: true
+			isPit: true
+		},
+		'*': {
+			isLight: true,
+			isFloor: true,
+			isSingular: true
 		},
 
 	}
@@ -288,10 +324,9 @@ Module.add('bab',()=>{
 		});
 	});
 
-	Bab.Mesh = class {
-		constructor(meshTypeId) {
-			let meshType = Bab.MeshTypeHash[meshTypeId];
-			this.instance = meshType.createInstance("prop" + Math.random());
+	Bab.Base = class {
+		constructor() {
+			this.instance = null;
 		}
 		set position(value) {
 			return this.instance.position = value;
@@ -302,21 +337,51 @@ Module.add('bab',()=>{
 		rotate(...args) {
 			this.instance.rotate(...args);
 		}
-		set scale(value) {
-			this.instance.scaling.x = value;
-			this.instance.scaling.z = value;
+		set scaleXZ(value) {
+			this.instance.scaling.x = value*ADJ;
+			this.instance.scaling.z = value*ADJ;
+		}
+	}
+
+	Bab.Mesh = class extends Bab.Base {
+		constructor(meshTypeId) {
+			super();
+			let meshType = Bab.MeshTypeHash[meshTypeId];
+			this.instance = meshType.createInstance("prop" + Math.random());
 		}
 	};
+
+	Bab.Billboard = class  extends Bab.Base {
+		constructor(imageFile,data) {
+			super();
+			let dimensions = {
+				height: data.height || 1,
+				width: data.width || 1,
+				depth: data.depth || 0.1
+			};
+			this.instance = BABYLON.MeshBuilder.CreatePlane("billboard", dimensions, Entity.scene)
+			let matStd = new BABYLON.StandardMaterial("matstd", Entity.scene);
+
+			matStd.diffuseTexture = new BABYLON.Texture(imageFile, Entity.scene);
+			matStd.diffuseTexture.hasAlpha = true;
+			matStd.useAlphaFromDiffuseTexture = true;
+			matStd.useSpecularOverAlpha = false;	// was true
+			matStd.alphaCutOff = 2/256;
+
+			this.instance.material = matStd;
+		}
+	}
+
 
 	Bab.Camera = class {
 		constructor(babPos) {
 			this.camera = new BABYLON.TargetCamera('gameCamera', babPos, Entity.scene);
 			this.camera.setTarget( new BABYLON.Vector3(0,0,1) );
 		}
-		setRotation(valueRads) {
+		setYaw(valueRads) {
 			this.camera.rotation.y = valueRads;
 		}
-		setNod(valueRads) {
+		setPitch(valueRads) {
 			this.camera.rotation.x = valueRads;
 		}
 	}
@@ -325,8 +390,12 @@ Module.add('bab',()=>{
 		constructor(scene) {
 			let id = 'L'+Math.random();
 			this.light = new BABYLON.PointLight(id, new BABYLON.Vector3(0,0,0), scene);
+ 			this.light.falloffType = BABYLON.Light.FALLOFF_PHYSICAL; //FALLOFF_GLTF;	// FALLOFF_STANDARD;
+
 			this.light.diffuse = new BABYLON.Color3(1.0, 0.64, 0.00);	// G was 0.85
-			this.light.specular = new BABYLON.Color3(1.0, 0.85, 0.00);
+//			this.light.diffuse = new BABYLON.Color3(1,1,1);
+			this.light.specular = new BABYLON.Color3(0.003,0.003,0.003); //1.0, 0.85, 0.00);
+//			this.light.specular = new BABYLON.Color3(1,1,1);
 			this.intensity = 0;
 		}
 		set intensity(value) {
@@ -407,18 +476,20 @@ Module.add( 'Obj3D', ()=>{
 	Entity.Mesh = class extends Entity.Base {
 		constructor(propTypeId,scene=Entity.scene) {
 			super();
-			console.assert( propTypeId );
-			this.propTypeId = propTypeId;
-			if( propTypeId ) {
-				let type = Bab.PropTypeHash[propTypeId];
-				if( type.meshTypeId ) {
-					this.babMesh = new Bab.Mesh(type.meshTypeId);
-					this.babMesh.position = this.babPos;
-				}
-				if( type.light ) {
-					this.babLight = new Bab.Light(scene);
-					this.light = type.light;
-					this.babLight.position = this.babPos;
+			if( propTypeId !== null ) {
+				console.assert( propTypeId );
+				this.propTypeId = propTypeId;
+				if( propTypeId ) {
+					let type = Bab.PropTypeHash[propTypeId];
+					if( type.meshTypeId ) {
+						this.babMesh = new Bab.Mesh(type.meshTypeId);
+						this.babMesh.position = this.babPos;
+					}
+					if( type.light ) {
+						this.babLight = new Bab.Light(scene);
+						this.light = type.light;
+						this.babLight.position = this.babPos;
+					}
 				}
 			}
 		}
@@ -428,6 +499,7 @@ Module.add( 'Obj3D', ()=>{
 		setRotation(rads) {
 			super.setRotation(rads);
 			if( this.babMesh ) {
+				//this.babMesh.instance.rotation.y = rads;
 				this.babMesh.rotate(BABYLON.Axis.Y, this._rotation, BABYLON.Space.WORLD);
 			}
 		}
@@ -436,7 +508,7 @@ Module.add( 'Obj3D', ()=>{
 		}
 		set scale(value) {
 			if( this.babMesh ) {
-				this.babMesh.scale = value;
+				this.babMesh.scaleXZ = value;
 			}
 		}
 	}
@@ -508,6 +580,21 @@ Module.add( 'Obj3D', ()=>{
 		}
 	}
 
+	Entity.Billboard = class extends Entity.Base {
+		constructor(imageFile,data) {
+			super(null);
+			this.babMesh = new Bab.Billboard(imageFile,data);
+			this.babMesh.position = this.babPos;
+			this.setXY(data.x,data.y,data.height*0.5);
+		}
+		setRotation(rads) {
+			super.setRotation(rads);
+			if( this.babMesh ) {
+				this.babMesh.instance.rotation.y = rads;
+				//this.babMesh.rotate(BABYLON.Axis.Y, this._rotation, BABYLON.Space.WORLD);
+			}
+		}
+	}
 
 
 	Entity.CameraOverhead = class extends Entity.Base {
@@ -544,15 +631,40 @@ Module.add( 'Obj3D', ()=>{
 	}
 
 	Entity.Player = class extends Entity.Mesh {
-		constructor(meshTypeId,eyeHeight,speed) {
+		constructor(meshTypeId,details) {
 			super(meshTypeId);
-			this.setXY(12,12,eyeHeight);
+			this.setXY(details.x,details.y,details.eyeHeight);
 			console.assert( Entity.unit );
-			this.speedForward  = speed;
-			this.speedSideways = speed;
+			this.speedForward  = details.speed;
+			this.speedSideways = details.speed;
+			this.facingRate = details.facingRate||1.0;
+			this.setNodCalibration(details.nodRate,details.nodMin,details.nodMax);
+			this.facing = 0;
+			this.nod = 0;
 			this.forward  = 0;
 			this.sideways = 0;
-			this.nod = 0;
+
+		}
+		setNodCalibration(rate,min,max) {
+			this.nodRate = rate;
+			this.nodMin = min;
+			this.nodMax = max;
+		}
+		get yaw() {
+			return this.getRotation();
+		}
+		get pitch() {
+			return this.nod/360*Math.PI*2;
+		}
+		addFacing(value) {
+			this.facing += value*this.facingRate;
+			console.log('Player facing =',this.facing,' rotation=',this._rotation);
+		}
+		addNod(value) {
+			console.assert( Number.isFinite(value) );
+			console.assert( Number.isFinite(this.nod) );
+			console.assert( Number.isFinite(this.nodRate) && Number.isFinite(this.nodMin) && Number.isFinite(this.nodMax) );
+			this.nod = Math.clamp( this.nod+value*this.nodRate, this.nodMin, this.nodMax );
 		}
 		tick(dt) {
 			let [dx,dy] = this.facingDxDy;
@@ -577,11 +689,14 @@ Module.add( 'Obj3D', ()=>{
 		setRotation(rads) {
 			console.assert( Number.isFinite(rads) );
 			super.setRotation( rads );
-			this.babCam.setRotation( this._rotation );
+			this.babCam.setYaw( this._rotation );
 		}
-		setNod(rads) {
+		setYaw(rads) {
+			this.setRotation(rads);
+		}
+		setPitch(rads) {
 			console.assert( Number.isFinite(rads) );
-			this.babCam.setNod( rads );
+			this.babCam.setPitch( rads );
 		}
 		tick(dt) {
 			console.assert( Number.isFinite(this.observer.x) && Number.isFinite(this.observer.y) );
@@ -589,8 +704,8 @@ Module.add( 'Obj3D', ()=>{
 			console.assert( Number.isFinite(this.observer.facing) );
 			this.setXY( this.observer.x, this.observer.y );
 			this.zAltitude	= this.observer.zAltitude;
-			this.facing		= this.observer.facing;
-			this.setNod( this.observer.nod );
+			this.setYaw( this.observer.yaw );
+			this.setPitch( this.observer.pitch );
 		}
 	}
 
@@ -619,11 +734,15 @@ Module.add( 'Obj3D', ()=>{
 				let tx = x*3;
 				let ty = y*3;
 				let symbol = this.map.tileSymbolGetFastUnasfe(x,y);
+				if( !type ) {
+					return;
+				}
 				let region = [tx,ty,3,3];
-				if( symbol==tWall ) {
+				if( type.isWall || type.isPit ) {
 					target.traverseRegion(...region,(tx,ty)=>{
-						target.tileSymbolSet(tx,ty,tWall);
+						target.tileSymbolSet(tx,ty,symbol);
 					});
+					return;
 				}
 				if( symbol==tDoor ) {
 					if( this.map.tileSymbolGet(x,y-1)==tFloor ) {
@@ -636,6 +755,10 @@ Module.add( 'Obj3D', ()=>{
 						target.tileSymbolSet(tx+1,ty+1,tDoor);
 						target.tileSymbolSet(tx+1,ty+2,tWall);
 					}
+					return;
+				}
+				if( type.isSingular ) {
+					target.tileSymbolSet(tx+1,ty+1,symbol);
 				}
 			});
 			this.map = target;
@@ -660,6 +783,9 @@ Module.add( 'Obj3D', ()=>{
 					new Entity.Mesh('doorStandard').setXY(x,y).setFacing( doorFace );
 					new Entity.Mesh('doorStandard').setXY(x,y).setFacing( doorFace+180 );
 					new Entity.Mesh('floorA').setXY(x,y);
+				}
+				if( type.isLight ) {
+					new Entity.Mesh('itemJustLight').setXY(x,y);
 				}
 				if( type.isFloor ) {
 					new Entity.Mesh('floorA').setXY(x,y);
@@ -717,86 +843,6 @@ window.addEventListener('DOMContentLoaded', function(){
 	}
 
 
-	let Manager = class {
-		constructor(scene) {
-			this.scene = scene;
-			Entity.scene = this.scene;
-			this.started = false;
-		}
-		load() {
-			BABYLON.SceneLoader.ImportMesh("", "./OrcStronghold/", "scene.gltf", this.scene, (meshList) => {
-				let meshTypeHash = {};
-				meshList.forEach( mesh=> {
-					let meshType = dad(mesh);
-					if( !meshType ) {
-						return;
-					}
-					meshTypeHash[mesh.id] = mesh;
-				});
-				Bab.MeshTypeHash = meshTypeHash;
-
-				// This must happen AFTER the processing above, so that the unique parents of all meshes can be found.
-				meshList.forEach( mesh=>mesh.isVisible = false );
-				meshList.forEach( mesh=>mesh.setParent(null) );
-			});
-		}
-		add(entity) {
-			return entity;
-		}
-		start() {
-			this.started = true;
-			Entity.unit = 200;
-			Entity.unitLight = Entity.unit * 500;
-
-			let mapString = globalMapString;
-
-			let mapMaker = new Entity.MapMaker(mapString);
-			mapMaker.triple().make();
-//			new Entity.Demo(Bab.MeshTypeHash).setXY(0,0).create();
-
-			this.add( new Entity.Mesh('itemLantern').setXY(14,14,0.5) );
-
-			this.player = new Entity.Player('itemJustLight',1.0,4);
-//			this.camera = this.add( new Entity.CameraOverhead().addListener(this.player) );
-
-			this.camera = new Entity.CameraFirstPerson(this.player);
-			var lightAmbient = new BABYLON.HemisphericLight('light1', new BABYLON.Vector3(0,1,0), this.scene);
-			lightAmbient.setEnabled(true)
-			lightAmbient.intensity = 0.00;
-
-			let canvas = document.getElementById('renderCanvas');
-			this.controls = new Controls(canvas,this.player);
-			this.controls.addListener();
-			this.controls.pointerLockRequest();
-			this.controls.keyDef['w'] = (target,value) => target.forward = value;
-			this.controls.keyDef['s'] = (target,value) => target.forward = -value;
-			this.controls.keyDef['a'] = (target,value) => target.sideways = value;
-			this.controls.keyDef['d'] = (target,value) => target.sideways = -value;
-			this.controls.mouseDef.move = (target,dx,dy) => {
-				target.facing += dx;
-				target.nod += dy*0.01;
-			}
-
-		}
-		tickRender() {
-			if( !Bab.MeshTypeHash ) {
-				return;
-			}
-			if( !this.started ) {
-				this.start();
-			}
-
-			this.scene.render();
-		}
-		tickSim(dt) {
-			if( !this.started ) {
-				return;
-			}
-			this.player.tick(dt);
-			this.camera.tick(dt);
-		}
-	}
-
 	class Controls {
 		constructor(canvas,target) {
 			console.assert(canvas);
@@ -810,7 +856,7 @@ window.addEventListener('DOMContentLoaded', function(){
 		get supportsPointerLock() {
 			return 'pointerLockElement' in document || 'mozPointerLockElement' in document || 'webkitPointerLockElement' in document;
 		}
-		isPointerLocked() {
+		get isPointerLocked() {
 			return document.pointerLockElement === this.pointerLockElement ||
 				document.mozPointerLockElement === this.pointerLockElement ||
 				document.webkitPointerLockElement === this.pointerLockElement;
@@ -853,7 +899,116 @@ window.addEventListener('DOMContentLoaded', function(){
 					this.mouseDef.move(this.target,dx,dy);
 				}
 			});
+			element.addEventListener('click',(event)=>{
+				if( !this.isPointerLocked ) {
+					this.pointerLockRequest();
+				}
+			});
 			return this;
+		}
+	}
+
+
+	let Manager = class {
+		constructor(scene) {
+			this.scene = scene;
+			Entity.scene = this.scene;
+			this.started = false;
+		}
+		load() {
+			BABYLON.SceneLoader.ImportMesh("", "./OrcStronghold/", "scene.gltf", this.scene, (meshList) => {
+				let meshTypeHash = {};
+				meshList.forEach( mesh=> {
+					let meshType = dad(mesh);
+					if( !meshType ) {
+						return;
+					}
+					meshTypeHash[mesh.id] = mesh;
+				});
+				Bab.MeshTypeHash = meshTypeHash;
+
+				// This must happen AFTER the processing above, so that the unique parents of all meshes can be found.
+				meshList.forEach( mesh=>mesh.isVisible = false );
+				meshList.forEach( mesh=>mesh.setParent(null) );
+				let scale = ADJ;
+				meshList.forEach( mesh=>{
+					mesh.scaling = new BABYLON.Vector3(scale,-scale,scale);
+				});
+			});
+		}
+		add(entity) {
+			return entity;
+		}
+		start() {
+			this.started = true;
+			Entity.unit = 1;
+			Entity.unitLight = Entity.unit*1;
+
+			let mapString = globalMapString;
+
+			let mapMaker = new Entity.MapMaker(mapString);
+			mapMaker.triple().make();
+//			new Entity.Demo(Bab.MeshTypeHash).setXY(0,0).create();
+
+//			this.add( new Entity.Mesh('itemLantern').setXY(14,14,0.5) );
+			let bear = new Entity.Billboard('images/bear.png',{
+				x: 10,
+				y: 10,
+				height: 1.3,
+				width: 1.3
+			});
+			Entity.scene.onBeforeRenderObservable.add( ()=>{
+				bear.babMesh.instance.lookAt(this.player.babPos,Math.PI);
+			});
+
+
+			this.player = new Entity.Player('itemJustLight',{
+				x: 12,
+				y: 12,
+				eyeHeight: 1.0,
+				speed: 4,
+				nodRate: 0.5,
+				nodMin: -89,
+				nodMax: 90,
+			});
+
+//			this.camera = this.add( new Entity.CameraOverhead().addListener(this.player) );
+
+			this.camera = new Entity.CameraFirstPerson(this.player);
+			var lightAmbient = new BABYLON.HemisphericLight('light1', new BABYLON.Vector3(0,1,0), this.scene);
+			lightAmbient.setEnabled(false)
+			lightAmbient.intensity = 0.50;
+
+			let canvas = document.getElementById('renderCanvas');
+			this.controls = new Controls(canvas,this.player);
+			this.controls.addListener();
+			this.controls.pointerLockRequest();
+			this.controls.keyDef['w'] = (target,value) => target.forward = value;
+			this.controls.keyDef['s'] = (target,value) => target.forward = -value;
+			this.controls.keyDef['a'] = (target,value) => target.sideways = value;
+			this.controls.keyDef['d'] = (target,value) => target.sideways = -value;
+			this.controls.mouseDef.move = (target,dx,dy) => {
+				target.addFacing(dx);
+				target.addNod(dy);
+			}
+
+		}
+		tickRender() {
+			if( !Bab.MeshTypeHash ) {
+				return;
+			}
+			if( !this.started ) {
+				this.start();
+			}
+
+			this.scene.render();
+		}
+		tickSim(dt) {
+			if( !this.started ) {
+				return;
+			}
+			this.player.tick(dt);
+			this.camera.tick(dt);
 		}
 	}
 
@@ -864,6 +1019,8 @@ window.addEventListener('DOMContentLoaded', function(){
 		let canvas = document.getElementById('renderCanvas');
 		let engine = new BABYLON.Engine(canvas, true);
 		let scene = new BABYLON.Scene(engine);
+		scene.clearColor = BABYLON.Color3.Black();
+
 		let manager  = new Manager(scene);
 		manager.load();
 
